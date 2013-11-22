@@ -1,0 +1,29 @@
+#!/bin/bash
+BUNDLEBASE=$(dirname "$0")
+RESOURCES=$(cd "$BUNDLEBASE/../Resources" && pwd )
+VBOX=$(cd "$BUNDLEBASE/../Resources" && echo "$(pwd)/$(echo *.vbox)" )
+UUID="$(grep -m 1 '<Machine' "$VBOX" | sed -E -e's/.*uuid="{([^"]+)}".*/\1/')"
+VM="/Applications/VirtualBox.app/Contents/Resources/VirtualBoxVM.app/Contents/MacOS/VirtualBoxVM"
+
+REGISTER=
+
+if VBoxManage list runningvms | grep -q -i $UUID; then
+  :
+elif VBoxManage list vms | grep -q -i $UUID; then
+  if ! VBoxManage showvminfo "$VBOX" &>/dev/null; then
+    VBoxManage unregistervm "$UUID"
+    REGISTER=1
+  fi
+else
+  REGISTER=1
+fi
+
+if [ -n "$REGISTER" ]; then
+  grep '<HardDisk ' "$VBOX" | sed -E -e's/.*uuid="{([^"]+)}".*/\1/' | sed '1!G;h;$!d' |
+  while read hd_uuid; do
+    VBoxManage closemedium disk $hd_uuid &>/dev/null
+  done
+  VBoxManage registervm "$VBOX"
+fi
+
+exec "$VM" --startvm $UUID --no-startvm-errormsgbox $@
